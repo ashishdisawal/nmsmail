@@ -4,8 +4,8 @@ from werkzeug import generate_password_hash, check_password_hash
 
 mysql = MySQL()
 app = Flask(__name__)
+app.secret_key = 'AAAAAAAAAAAA'
 
-#app.secret_key = ''
 #MySQL configurations
 app.config['MYSQL_DATABASE_USER'] = 'osho'
 app.config['MYSQL_DATABASE_PASSWORD'] = 'J6M767Dv36tdP8J'
@@ -39,6 +39,56 @@ def userHome():
 def logout():
 	session.pop('user', None)
 	return redirect('/')
+
+@app.route('/addWish', methods=['POST'])
+def addWish():
+	conn = mysql.connect()
+	cursor = conn.cursor()
+	try:
+		if session.get('user'):
+			_title = request.form['inputTitle']
+			_description = request.form['inputDescription']
+			_user = session.get('user')
+	
+			cursor.callproc('sp_addWish', (_title, _description, _user))
+			data = cursor.fetchall()
+	
+			if len(data) is 0:
+				conn.commit()
+				return redirect('/userHome')
+			else:
+				return render_template('error.html', error = 'An error occurred!')
+		else:
+			return render_template('error.html', error = 'Unauthorized access')
+	except Exception as e:
+		return render_template('error.html', error = str(e))
+	finally:
+		cursor.close()
+		conn.close()
+
+@app.route('/getWish')
+def getWish():
+	try:
+		if session.get('user'):
+			_user = session.get('user')
+			con = mysql.connect()
+			cursor = con.cursor()
+			cursor.callproc('sp_GetWishByUser', (_user,))
+			wishes = cursor.fetchall()
+
+			wishes_dict = []
+			for wish in wishes:
+				wish_dict = {
+						'Id': wish[0],
+						'Title': wish[1],
+						'Description': wish[2],
+						'Date': wish[4]}
+				wishes_dict.append(wish_dict)
+			return json.dumps(wishes_dict)
+		else:
+			return render_template('error.html', error = 'Unauthorized Access')
+	except Exception as e:
+		return render_template('error.html', error = str(e))
 
 @app.route('/validateLogin', methods=['POST'])
 def validateLogin():
@@ -94,6 +144,10 @@ def signUp():
 	finally:
 		cursor.close()
 		conn.close()
+
+@app.route('/showAddWish')
+def showAddWish():
+	return render_template('addWish.html')
 
 if __name__ == "__main__":
 	app.run(host="0.0.0.0", use_reloader=True, debug=True)
